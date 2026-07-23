@@ -19,7 +19,7 @@ import pandas as pd
 
 from config.config import KARACHI_LAT, KARACHI_LON
 
-WATHER_URL = "https://historical-forecast-api.open-meteo.com/v1/forecast"
+WEATHER_URL = "https://historical-forecast-api.open-meteo.com/v1/forecast"
 AQ_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 
 START_DATE = "2025-01-01"
@@ -45,7 +45,6 @@ def main():
     # ============================================================
     # 1. Air Quality API — the 6 pollutants + AQI
     # ============================================================
-    aq_url = "https://air-quality-api.open-meteo.com/v1/air-quality"
     aq_params = {
         "latitude": lat,
         "longitude": lon,
@@ -64,7 +63,7 @@ def main():
     }
 
     print("Fetching air quality data...")
-    aq_responses = client.weather_api(aq_url, params=aq_params)
+    aq_responses = client.weather_api(AQ_URL, params=aq_params)
     aq_response = aq_responses[0]
     print(f"  Coordinates returned: {aq_response.Latitude()}, {aq_response.Longitude()}")
     print(f"  Elevation: {aq_response.Elevation()} m")
@@ -105,7 +104,6 @@ def main():
     # ============================================================
     # 2. Weather API — temperature, humidity, wind, pressure
     # ============================================================
-    weather_url = "https://historical-forecast-api.open-meteo.com/v1/forecast"
     weather_params = {
         "latitude": lat,
         "longitude": lon,
@@ -123,7 +121,7 @@ def main():
     }
 
     print("Fetching weather data...")
-    weather_responses = client.weather_api(weather_url, params=weather_params)
+    weather_responses = client.weather_api(WEATHER_URL, params=weather_params)
     weather_response = weather_responses[0]
 
     weather_hourly = weather_response.Hourly()
