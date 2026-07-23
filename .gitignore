@@ -1,0 +1,58 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+venv/
+logs/
+*.log
+.DS_Store
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# Virtual Env
+*.venv
+
+# Data files
+*.csv
+*.parquet
+data/
+
+# Model artifacts
+*.pkl
+*.joblib
+*.h5
+*.keras
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+
+# API cache
+.cache.sqlite
+*.sqlite
+
+# Working notes - not for public repo
+notes.md
+
+# pip freeze artifacts (debug only)
+requirements_full.txt
+
+# Force-include champion artifacts and analysis outputs
+!models/champion/**/*.joblib
+!models/champion/**/*.json
+!artifacts/**/*.csv
+!models/cqr/**/*.joblib
+
+# Project-specific
+AQI_predict-1.pdf
+anaconda_projects/
+audit_report.md 
+
+# Local-only backups and one-off diagnostics
+notebooks/oldeda.ipynb
+pipelines/check_offline_completeness.py
+pipelines/check_online_store.py
+report/
