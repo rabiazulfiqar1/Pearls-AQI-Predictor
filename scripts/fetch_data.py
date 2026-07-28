@@ -22,8 +22,8 @@ from config.config import KARACHI_LAT, KARACHI_LON
 WEATHER_URL = "https://historical-forecast-api.open-meteo.com/v1/forecast"
 AQ_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 
-START_DATE = "2025-01-01"
-END_DATE = "2025-12-31"
+START_DATE = "2024-01-01"
+END_DATE = "2026-07-27"
 
 OUTPUT_PATH = Path("data/processed")
 OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
