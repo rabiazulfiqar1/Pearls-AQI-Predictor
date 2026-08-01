@@ -43,7 +43,54 @@ def run_push_pipeline() -> int:
 
     logger.info("Step 1/3: loading local engineered CSV")
     engineered = pd.read_csv(LOCAL_CSV_PATH)
-    engineered["timestamp"] = pd.to_datetime(engineered["timestamp"], utc=True)
+    engineered["timestamp"] = (
+        pd.to_datetime(engineered["timestamp"])
+        .dt.tz_localize(None)
+    )
+
+    engineered = engineered.dropna()
+    # Convert float columns
+    float_cols = [
+        "pm2_5",
+        "pm10",
+        "no2",
+        "o3",
+        "so2",
+        "co",
+        "us_aqi",
+        "temperature_2m",
+        "relative_humidity_2m",
+        "wind_speed_10m",
+        "pressure_msl",
+        "precipitation",
+        "cloud_cover",
+        "aqi",
+        "aqi_lag_24h",
+        "pm2_5_lag_24h",
+        "aqi_lag_48h",
+        "pm2_5_lag_48h",
+        "aqi_lag_72h",
+        "pm2_5_lag_72h",
+        "aqi_change_rate_1h",
+        "aqi_change_rate_24h",
+        "target_aqi_24h",
+        "target_aqi_48h",
+        "target_aqi_72h"
+    ]
+
+    engineered[float_cols] = engineered[float_cols].astype("float32")
+
+
+    # Convert integer columns
+    int_cols = [
+        "hour",
+        "day_of_week",
+        "month",
+        "is_weekend",
+        "has_target"
+    ]
+
+    engineered[int_cols] = engineered[int_cols].astype("int32")
     logger.info("Loaded %d rows from %s", len(engineered), LOCAL_CSV_PATH.resolve())
 
     logger.info("Step 2/3: connecting to Hopsworks")
@@ -61,8 +108,9 @@ def run_push_pipeline() -> int:
             "data; kept current by pipelines.feature_pipeline (hourly)."
         ),
         online_enabled=False,
+        time_travel_format="HUDI",
     )
-    fg.insert(engineered.head(1), write_options={"wait_for_job": True})
+    fg.insert(engineered, write_options={"wait_for_job": True})
     logger.info("Push complete: %d rows materialized", len(engineered))
     return len(engineered)
 

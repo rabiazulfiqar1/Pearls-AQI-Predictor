@@ -1,15 +1,26 @@
-import sys
-from pathlib import Path
 
-import pandas as pd
+import os
+from dotenv import load_dotenv
+import hopsworks
+load_dotenv()
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from utils.logger import get_logger
+project = hopsworks.login(
+    api_key_value=os.getenv("HOPSWORKS_API_KEY"),
+    project=os.getenv("HOPSWORKS_PROJECT_NAME")
+)
 
-logger = get_logger(__name__)
+fs = project.get_feature_store()
 
-LOCAL_CSV_PATH = Path("data/processed/karachi_backfill_engineered.csv")
+fg = fs.get_feature_group(
+    name="aqi_features",
+    version=1
+)
 
-engineered = pd.read_csv(LOCAL_CSV_PATH)
-engineered["timestamp"] = pd.to_datetime(engineered["timestamp"], utc=True)
-print(engineered.dtypes)
+df = fg.read()
+
+print("Rows:", len(df))
+print("\nColumns:")
+print(df.columns)
+
+print("\nFirst 5 rows:")
+print(df.head())

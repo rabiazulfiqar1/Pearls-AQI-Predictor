@@ -58,7 +58,7 @@ FEATURE_GROUP_NAME = "aqi_features"
 FEATURE_GROUP_VERSION = 1
 
 END_DATE = datetime.now(timezone.utc).date() - timedelta(days=1)
-START_DATE = date(2025, 7, 1)
+START_DATE = date(2024, 7, 1)
 
 REQUEST_DELAY_SECONDS = 1.0
 
@@ -193,6 +193,7 @@ def run_backfill_pipeline() -> int:
             "data; kept current by pipelines.feature_pipeline (hourly)."
         ),
         online_enabled=False,
+        time_travel_format="HUDI"
     )
     fg.insert(engineered, write_options={"wait_for_job": True})
     logger.info("Backfill insert complete: %d rows materialized", len(engineered))
