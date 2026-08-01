@@ -1,6 +1,7 @@
 # Feature store + model registry
 hopsworks==5.0.3
-
+deltalake==1.6.2
+confluent-kafka==2.11.1
 # API client (Open-Meteo)
 openmeteo-requests==1.7.5
 openmeteo-sdk==1.28.0
