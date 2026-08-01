@@ -4,13 +4,23 @@ Central configuration for Pearls AQI Predictor.
 Single source of truth for all constants. Every pipeline imports from here.
 Do NOT hardcode values in other files — add them here and import.
 """
-
 # ========================================================================
-# Location — Karachi centroid
+# API Configuration
 # ========================================================================
 
+# Coordinates for Karachi data retrieval
 KARACHI_LAT = 24.8607
 KARACHI_LON = 67.0011
+
+# ========================================================================
+# Hopsworks feature group
+# ========================================================================
+FEATURE_GROUP_NAME    = "aqi_features"
+FEATURE_GROUP_VERSION = 1
+
+# Retry configuration for failed API requests
+API_RETRY_COUNT = 3
+API_RETRY_BASE_DELAY = 5
 
 # ========================================================================
 # Feature engineering — lag features (hours)

@@ -15,26 +15,24 @@ Both are idempotent: running twice on the same DataFrame is safe.
 All configurable constants come from config.config — never hardcoded here.
 """
 
-from typing import List
-
 import numpy as np
 import pandas as pd
 
 from config.config import (
-    LAG_HOURS,
-    ROLLING_WINDOW_SHORT,
-    ROLLING_WINDOW_LONG,
-    ROLLING_WINDOW_BASELINE,
     CHANGE_RATE_WINDOWS_HOURS,
+    LAG_HOURS,
+    ROLLING_WINDOW_BASELINE,
+    ROLLING_WINDOW_LONG,
+    ROLLING_WINDOW_SHORT,
     TARGET_HORIZONS_HOURS,
 )
 
-POLLUTANTS: List[str] = ["pm2_5", "pm10", "no2", "o3", "so2", "co"]
+POLLUTANTS: list[str] = ["pm2_5", "pm10", "no2", "o3", "so2", "co"]
 
 # Matches what fetch_karachi_data.py / build_aqi_features.py actually pull
 # from Open-Meteo's weather API — not the generic "temperature/humidity/
 # wind_speed/pressure" names, so no silent rename step is needed upstream.
-WEATHER: List[str] = [
+WEATHER: list[str] = [
     "temperature_2m",
     "relative_humidity_2m",
     "wind_speed_10m",
@@ -232,7 +230,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 # Convenience — the List of feature columns the models will consume
 # ========================================================================
 
-def get_feature_columns() -> List[str]:
+def get_feature_columns() -> list[str]:
     """
     Return the ordered List of input feature column names (not targets,
     not metadata). The training pipeline uses this to slice X.
@@ -252,6 +250,6 @@ def get_feature_columns() -> List[str]:
     return feature_cols
 
 
-def get_target_columns() -> List[str]:
+def get_target_columns() -> list[str]:
     """Return the target column names in horizon order."""
     return [f"target_aqi_{h}h" for h in TARGET_HORIZONS_HOURS]
