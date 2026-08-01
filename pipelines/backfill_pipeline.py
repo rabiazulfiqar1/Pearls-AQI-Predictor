@@ -203,8 +203,8 @@ def main() -> None:
     try:
         n_inserted = run_backfill_pipeline()
         logger.info("Backfill pipeline OK. Inserted %d rows.", n_inserted)
-    except Exception as exc:
-        logger.exception("Backfill pipeline failed: %s", exc)
+    except Exception:
+        logger.exception("Backfill pipeline failed")
         sys.exit(1)
 
 

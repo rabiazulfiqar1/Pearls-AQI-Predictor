@@ -260,8 +260,8 @@ def main() -> None:
     try:
         n_inserted = run_feature_pipeline()
         logger.info("Feature pipeline OK. Inserted %d rows.", n_inserted)
-    except Exception as exc:
-        logger.exception("Feature pipeline failed: %s", exc)
+    except Exception:
+        logger.exception("Feature pipeline failed")
         sys.exit(1)
 
 
