@@ -6,10 +6,7 @@ on:
     - cron: "5 * * * *" # minute hour day month weekday
   workflow_dispatch: {}   # lets you trigger a run manually from the Actions tab
 
-# Prevent overlapping runs if a previous run is still going
-concurrency:
-  group: feature-pipeline
-  cancel-in-progress: false
+ 
 
 jobs:
   run-feature-pipeline:

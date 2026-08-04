@@ -119,8 +119,8 @@ def main() -> None:
     try:
         n_inserted = run_push_pipeline()
         logger.info("Push pipeline OK. Inserted %d rows.", n_inserted)
-    except Exception as exc:
-        logger.exception("Push pipeline failed: %s", exc)
+    except Exception:
+        logger.exception("Push pipeline failed")
         sys.exit(1)
 
 

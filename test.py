@@ -1,7 +1,9 @@
 
 import os
-from dotenv import load_dotenv
+
 import hopsworks
+from dotenv import load_dotenv
+
 load_dotenv()
 
 project = hopsworks.login(
