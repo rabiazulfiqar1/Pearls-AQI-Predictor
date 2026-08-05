@@ -46,9 +46,9 @@ PREDICTIONS_FG_NAME = "aqi_predictions"
 PREDICTIONS_FG_VERSION = 1
 
 # --- must match training_pipeline.py exactly ---------------------------
-TARGET_COLUMNS = ["aqi_target_24h", "aqi_target_48h", "aqi_target_72h"]
+TARGET_COLUMNS = ["target_aqi_24h", "target_aqi_48h", "target_aqi_72h"]
 NON_FEATURE_COLUMNS = ["timestamp"] + TARGET_COLUMNS
-HORIZON_HOURS = {"aqi_target_24h": 24, "aqi_target_48h": 48, "aqi_target_72h": 72}
+HORIZON_HOURS = {"target_aqi_24h": 24, "target_aqi_48h": 48, "target_aqi_72h": 72}
 # -------------------------------------------------------------------------
 
 

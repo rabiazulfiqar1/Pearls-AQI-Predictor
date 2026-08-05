@@ -53,14 +53,15 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from sklearn.preprocessing import StandardScaler
-from tensorflow import keras
-from tensorflow.keras import layers
+
+keras = tf.keras
+layers = tf.keras.layers
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from utils.hopsworks_client import get_feature_store
 from utils.logger import get_logger
-from utils.metrics import evaluate, print_metrics_table
+from utils.metrics import evaluate
 from utils.sequences import build_sequences, get_feature_cols, reindex_to_hourly_grid
 
 logger = get_logger(__name__)
@@ -68,7 +69,7 @@ logger = get_logger(__name__)
 FEATURE_GROUP_NAME = "aqi_features"
 FEATURE_GROUP_VERSION = 1
 
-TARGET_COLUMNS = ["aqi_target_24h", "aqi_target_48h", "aqi_target_72h"]
+TARGET_COLUMNS = ["target_aqi_24h", "target_aqi_48h", "target_aqi_72h"]
 HORIZONS = [24, 48, 72]
 
 LOOKBACK_HOURS = 72          # hours of history the model sees per prediction
@@ -191,8 +192,8 @@ def run_training() -> dict:
 
     X, y, timestamps = build_sequences(df, feature_cols, TARGET_COLUMNS, lookback=LOOKBACK_HOURS)
 
-    X_train, y_train, X_val, y_val, X_test, y_test, ts_test = chronological_split(X, y, timestamps)
-    X_train, X_val, X_test, scaler = scale(X_train, X_val, X_test)
+    X_train, y_train, X_val, y_val, X_test, y_test, _ = chronological_split(X, y, timestamps)
+    X_train, X_val, X_test, _ = scale(X_train, X_val, X_test)
 
     model = build_model(lookback=LOOKBACK_HOURS, n_features=X_train.shape[2])
     model.summary(print_fn=logger.info)

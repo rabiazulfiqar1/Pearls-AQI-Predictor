@@ -5,7 +5,7 @@ Used by all model training scripts to evaluate forecasts on the holdout
 set and print a clean, scannable per-horizon comparison.
 """
 
-from typing import Dict, Iterable, Optional
+from collections.abc import Iterable
 
 import numpy as np
 import pandas as pd
@@ -15,7 +15,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 def regression_metrics(
     y_true: Iterable[float],
     y_pred: Iterable[float],
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Compute RMSE, MAE, R² for a single (y_true, y_pred) pair.
 
@@ -39,7 +39,7 @@ def regression_metrics(
     }
 
 
-def metrics_table(results: Dict[str, Dict[str, Dict[str, float]]]) -> pd.DataFrame:
+def metrics_table(results: dict[str, dict[str, dict[str, float]]]) -> pd.DataFrame:
     """
     Build a tidy DataFrame from a nested results dict.
 
@@ -68,8 +68,8 @@ def metrics_table(results: Dict[str, Dict[str, Dict[str, float]]]) -> pd.DataFra
 
 
 def print_metrics_by_horizon(
-    results: Dict[str, Dict[str, Dict[str, float]]],
-    horizons: Optional[Iterable[str]] = None,
+    results: dict[str, dict[str, dict[str, float]]],
+    horizons: Iterable[str] | None,
 ) -> None:
     """
     Print one narrow table per horizon for easy scanning.

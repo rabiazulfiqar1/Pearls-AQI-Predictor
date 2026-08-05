@@ -78,14 +78,13 @@ def time_split(df: pd.DataFrame, feature_cols: list[str]):
 
 
 def build_nn(n_features: int, n_targets: int):
-    from tensorflow.keras.layers import Dense, Dropout
-    from tensorflow.keras.models import Sequential
+    import tensorflow as tf
 
-    model = Sequential([
-        Dense(128, activation="relu", input_shape=(n_features,)),
-        Dropout(0.2),
-        Dense(64, activation="relu"),
-        Dense(n_targets),
+    model = tf.keras.Sequential([
+        tf.keras.layers.Dense(128, activation="relu", input_shape=(n_features,)),
+        tf.keras.layers.Dropout(0.2),
+        tf.keras.layers.Dense(64, activation="relu"),
+        tf.keras.layers.Dense(n_targets),
     ])
     model.compile(optimizer="adam", loss="mse")
     return model
