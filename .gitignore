@@ -13,7 +13,6 @@ notebooks/.ipynb_checkpoints/
 *.venv
 
 # Data files
-*.csv
 *.parquet
 data/
 
