@@ -39,5 +39,3 @@ Thumbs.db
 models/champion/**/*.joblib
 artifacts/**/*.csv
 models/cqr/**/*.joblib
-
-REPORT.md
