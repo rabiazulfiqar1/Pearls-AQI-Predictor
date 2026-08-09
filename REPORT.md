@@ -55,7 +55,7 @@ The main code paths are implemented in the repository folders [app](app), [model
 
 The dashboard uses the inference logic in [models/predict.py](models/predict.py), while the public UI is implemented in [app/dashboard.py](app/dashboard.py).
 
-<img src="architecture.png" alt="System architecture" width="800" />
+<img src="architecture.png" alt="System architecture" style="max-width: 800px; width: 100%; height: auto; display: block; margin: 0 auto;" />
 
 ---
 

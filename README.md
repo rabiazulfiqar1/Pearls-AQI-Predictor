@@ -20,7 +20,7 @@ End-to-end MLOps system that forecasts Karachi's Air Quality Index (AQI) up to 7
 
 ## Architecture
 
-<img src="architecture.png" alt="System architecture" width="800" />
+<img src="architecture.png" alt="System architecture" style="max-width: 800px; width: 100%; height: auto; display: block; margin: 0 auto;" />
 
 The architecture diagram above summarizes the end-to-end flow from Open-Meteo data ingestion to feature storage, model registration, and user-facing forecast delivery.
 
