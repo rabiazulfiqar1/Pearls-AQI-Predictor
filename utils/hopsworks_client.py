@@ -21,9 +21,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def get_feature_store():
+
+def _login():
     """
-    Log into Hopsworks and return the project's feature store handle.
+    Log into Hopsworks and return the project handle.
 
     Raises RuntimeError with a clear message if HOPSWORKS_API_KEY is
     missing, rather than letting the hopsworks library's own (less
@@ -38,11 +39,27 @@ def get_feature_store():
             "put it in a .env file that's loaded before this runs."
         )
 
-    project_name = os.environ.get("HOPSWORKS_PROJECT")  
+    project_name = os.environ.get("HOPSWORKS_PROJECT")
 
     login_kwargs = {"api_key_value": api_key}
     if project_name:
         login_kwargs["project"] = project_name
 
-    project = hopsworks.login(**login_kwargs)
+    return hopsworks.login(**login_kwargs)
+
+
+def get_feature_store():
+    """Log into Hopsworks and return the project's feature store handle."""
+    project = _login()
     return project.get_feature_store()
+
+
+def get_model_registry():
+    """Log into Hopsworks and return the project's model registry handle.
+
+    Used by models/register_to_registry.py to register the per-horizon
+    champion (and CQR) models, and by models/predict.py to fetch them
+    back out at inference time.
+    """
+    project = _login()
+    return project.get_model_registry()
