@@ -8,20 +8,13 @@ Flow:
        this single row already encodes the recent history a model
        needs — no need to reconstruct a window here.
     2. Load the current-best model from the Hopsworks Model Registry
-       (the one training_pipeline.py registered).
+       (the one train.py registered).
     3. Predict [aqi_t+24h, aqi_t+48h, aqi_t+72h] from that row.
     4. Map horizons to calendar days and write/print the 3-day
-       forecast. Optionally logs the prediction back to Hopsworks in
-       a small "aqi_predictions" feature group, so you can later
-       compare predictions against realized AQI once those hours
-       actually pass (useful for monitoring drift).
-
-Run this hourly or on-demand (it's cheap — one row read, one
-inference call). Separate from training_pipeline.py, which is the
-expensive daily retrain.
+       forecast. 
 
 Usage:
-    python -m pipelines.predict_pipeline
+    python -m models.predict
 """
 
 import sys
@@ -67,17 +60,17 @@ def load_best_model():
     """
     Fetch the currently-registered model from the Hopsworks Model
     Registry. Picks the version with the lowest avg_rmse metric (the
-    metric training_pipeline.py logs at registration time).
+    metric train.py logs at registration time).
     """
     import hopsworks
 
-    project = hopsworks.login()  # same auth path as training_pipeline.py
+    project = hopsworks.login()  # same auth path as train.py
     mr = project.get_model_registry()
     models = mr.get_models(name=MODEL_NAME)
     if not models:
         raise RuntimeError(
             f"No versions of '{MODEL_NAME}' found in the Model Registry. "
-            f"Run training_pipeline.py at least once first."
+            f"Run train.py at least once first."
         )
     best = min(models, key=lambda m: m.training_metrics.get("avg_rmse", float("inf")))
     logger.info("Loaded model '%s' v%d (avg_rmse=%.3f)",

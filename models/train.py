@@ -1,6 +1,5 @@
 """
-Training pipeline — daily model (re)training.
-
+Training pipeline
 Flow:
     1. Fetch the full historical feature group from Hopsworks (same
        one backfill_pipeline.py / feature_pipeline.py maintain).
@@ -18,11 +17,8 @@ Flow:
        the best average RMSE across horizons.
     5. Register the winner in the Hopsworks Model Registry.
 
-Run daily (e.g. via the same GitHub Actions setup as feature_pipeline.py,
-just on a daily cron instead of hourly).
-
 Usage:
-    python -m pipelines.training_pipeline
+    python -m models.train
 """
 
 import sys
