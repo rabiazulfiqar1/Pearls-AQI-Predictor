@@ -1,0 +1,49 @@
+name: Daily champion retrain
+
+on:
+  schedule:
+    # 03:00 UTC daily i.e after hourly feature pipeline has had time to catch up on the day's data.
+    - cron: "0 3 * * *"
+  workflow_dispatch: {}   #
+
+jobs:
+  retrain-champion:
+    runs-on: ubuntu-latest
+    # Both Ridge (24h) and XGBoost (48h/72h, fixed hyperparameters no daily search).
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Retrain champion (Ridge @ 24h, XGBoost @ 48h/72h — fixed hyperparams)
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+        run: python -m models.train_champion
+
+      - name: Register champion to Hopsworks Model Registry
+        # Only runs if training succeeded AND the regression guard in
+        # train_champion.py didn't trip — a regressed model should never
+        # reach the registry.
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+        run: python -m models.register_to_registry --champion-only
+
+      - name: Upload training artifacts (debug aid on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: champion-training-run-${{ github.run_number }}
+          path: models/champion/
+          retention-days: 14
