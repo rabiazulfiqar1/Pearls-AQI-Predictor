@@ -67,7 +67,7 @@ TOP_N = 15  # matches shap_pruned_classical_models.ipynb (Day 9b)
 # holdout results (see module docstring), not a fixed choice across the board.
 MODEL_PER_HORIZON = {24: "ridge", 48: "xgboost", 72: "xgboost"}
 
-SHAP_CSV_TEMPLATE = str(Path(__file__).resolve().parent / "SHAP" / "shap_importance_{h}h.csv")
+SHAP_CSV_TEMPLATE = str(Path(__file__).resolve().parent.parent / "SHAP" / "shap_importance_{h}h.csv")
 
 TRAIN_FRACTION = 0.8          # chronological — last 20% is holdout, matches the notebook
 CV_N_SPLITS = 5

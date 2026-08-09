@@ -3,15 +3,22 @@ Prediction pipeline — real-time inference for the next 3 days.
 
 Flow:
     1. Pull the MOST RECENT row from the Hopsworks feature group.
-       Because feature engineering already computes lags/rolling
-       stats/time features at ingestion time (see feature_pipeline.py),
-       this single row already encodes the recent history a model
-       needs — no need to reconstruct a window here.
-    2. Load the current-best model from the Hopsworks Model Registry
-       (the one train.py registered).
-    3. Predict [aqi_t+24h, aqi_t+48h, aqi_t+72h] from that row.
-    4. Map horizons to calendar days and write/print the 3-day
-       forecast. 
+       Feature engineering already computes lags/rolling stats/time
+       features at ingestion time (see feature_pipeline.py), so this
+       single row already encodes the recent history a model needs.
+    2. For EACH horizon (24h/48h/72h), load that horizon's own
+       production champion from the Model Registry:
+           karachi_aqi_champion_24h  (Ridge)
+           karachi_aqi_champion_48h  (XGBoost)
+           karachi_aqi_champion_72h  (XGBoost)
+       These are separate models with separate SHAP-selected feature
+       sets — NOT one multi-output model — matching how
+       models/train_champion.py + models/register_to_registry.py
+       actually produce and register them.
+    3. Predict aqi_t+{h}h per horizon using only that horizon's
+       feature subset, filling any missing values with the medians
+       saved alongside the model at training time (feature_medians.json).
+    4. Map horizons to calendar times and write/print the 3-day forecast.
 
 Usage:
     python -m models.predict
@@ -26,23 +33,19 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from utils.hopsworks_client import get_feature_store
+from utils.hopsworks_client import get_feature_store, get_model_registry
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 FEATURE_GROUP_NAME = "aqi_features"
 FEATURE_GROUP_VERSION = 1
-MODEL_NAME = "aqi_multi_horizon_model"
+
+HORIZONS = [24, 48, 72]
+CHAMPION_MODEL_NAME_TEMPLATE = "karachi_aqi_champion_{h}h"
 
 PREDICTIONS_FG_NAME = "aqi_predictions"
 PREDICTIONS_FG_VERSION = 1
-
-# --- must match training_pipeline.py exactly ---------------------------
-TARGET_COLUMNS = ["target_aqi_24h", "target_aqi_48h", "target_aqi_72h"]
-NON_FEATURE_COLUMNS = ["timestamp"] + TARGET_COLUMNS
-HORIZON_HOURS = {"target_aqi_24h": 24, "target_aqi_48h": 48, "target_aqi_72h": 72}
-# -------------------------------------------------------------------------
 
 
 def load_latest_row() -> pd.DataFrame:
@@ -56,55 +59,83 @@ def load_latest_row() -> pd.DataFrame:
     return latest, fs
 
 
-def load_best_model():
+def load_champion_for_horizon(mr, horizon: int):
     """
-    Fetch the currently-registered model from the Hopsworks Model
-    Registry. Picks the version with the lowest avg_rmse metric (the
-    metric train.py logs at registration time).
+    Fetch the currently-registered champion for a single horizon.
+    Champions are registered per-horizon (see register_to_registry.py),
+    each carrying its own algorithm and its own metrics — pick the
+    version with the best (highest) r2, which is the metric
+    train_champion.py logs at registration time.
     """
-    import hopsworks
-
-    project = hopsworks.login()  # same auth path as train.py
-    mr = project.get_model_registry()
-    models = mr.get_models(name=MODEL_NAME)
+    name = CHAMPION_MODEL_NAME_TEMPLATE.format(h=horizon)
+    models = mr.get_models(name=name)
     if not models:
         raise RuntimeError(
-            f"No versions of '{MODEL_NAME}' found in the Model Registry. "
-            f"Run train.py at least once first."
+            f"No versions of '{name}' found in the Model Registry. "
+            f"Run models.train_champion + models.register_to_registry first."
         )
-    best = min(models, key=lambda m: m.training_metrics.get("avg_rmse", float("inf")))
-    logger.info("Loaded model '%s' v%d (avg_rmse=%.3f)",
-                best.name, best.version, best.training_metrics.get("avg_rmse", -1))
+    best = max(models, key=lambda m: m.training_metrics.get("r2", float("-inf")))
+    logger.info(
+        "Loaded %s v%d (r2=%.3f)", best.name, best.version, best.training_metrics.get("r2", float("nan"))
+    )
 
     model_dir = Path(best.download())
     joblib_path = next(model_dir.glob("*.joblib"), None)
-    keras_path = next(model_dir.glob("*.keras"), None)
+    medians_path = model_dir / "feature_medians.json"
 
-    if joblib_path:
-        return joblib.load(joblib_path), "sklearn"
-    elif keras_path:
-        from keras.models import load_model
-        return load_model(keras_path), "keras"
-    else:
-        raise RuntimeError(f"No model file found in {model_dir}")
+    if joblib_path is None:
+        raise RuntimeError(f"No model.joblib found in {model_dir} for {name}")
+    if not medians_path.exists():
+        raise RuntimeError(f"No feature_medians.json found in {model_dir} for {name}")
+
+    model = joblib.load(joblib_path)
+
+    # feature_medians.json's keys ARE this horizon's top-15 SHAP feature
+    # list (it was written from feature_medians.to_dict() in
+    # train_champion.py, in the same column order the model was fit on).
+    # Reusing it here avoids needing a separate features-list artifact.
+    feature_medians = pd.read_json(medians_path, typ="series")
+
+    # model_type_code was logged alongside the numeric metrics in
+    # register_to_registry.py ({"ridge": 0, "xgboost": 1}); decode it
+    # rather than sniffing type(model).__name__, so this stays correct
+    # even if the underlying estimator class changes later.
+    code_to_type = {0: "ridge", 1: "xgboost"}
+    model_type = code_to_type.get(best.training_metrics.get("model_type_code"), "unknown")
+    rmse = best.training_metrics.get("rmse")
+
+    return model, feature_medians, model_type, rmse
 
 
-def predict_next_3_days(latest_row: pd.DataFrame, model, kind: str) -> pd.DataFrame:
-    feature_cols = [c for c in latest_row.columns if c not in NON_FEATURE_COLUMNS]
-    X = latest_row[feature_cols].values
+def predict_horizon(latest_row: pd.DataFrame, model, feature_medians: pd.Series) -> float:
+    features = feature_medians.index.tolist()
 
-    preds = model.predict(X)
-    preds = preds[0] if preds.ndim > 1 else preds  # single row in, single row out
+    missing_cols = [c for c in features if c not in latest_row.columns]
+    if missing_cols:
+        raise ValueError(
+            f"Latest feature row is missing columns required by this champion: {missing_cols}"
+        )
 
+    X = latest_row[features].copy()
+    X = X.fillna(feature_medians)
+
+    pred = model.predict(X)
+    return float(pred[0])
+
+
+def predict_next_3_days(latest_row: pd.DataFrame, mr) -> pd.DataFrame:
     base_time = latest_row["timestamp"].iloc[0]
     rows = []
-    for target_col, hours_ahead in HORIZON_HOURS.items():
-        idx = TARGET_COLUMNS.index(target_col)
+    for h in HORIZONS:
+        model, feature_medians, model_type, rmse = load_champion_for_horizon(mr, h)
+        predicted_aqi = predict_horizon(latest_row, model, feature_medians)
         rows.append({
-            "forecast_for": base_time + timedelta(hours=hours_ahead),
-            "horizon_hours": hours_ahead,
-            "predicted_aqi": float(preds[idx]),
+            "forecast_for": base_time + timedelta(hours=h),
+            "horizon_hours": h,
+            "predicted_aqi": predicted_aqi,
             "generated_at": base_time,
+            "model_type": model_type,
+            "holdout_rmse": rmse,
         })
     result = pd.DataFrame(rows)
     logger.info("3-day forecast:\n%s", result.to_string(index=False))
@@ -130,11 +161,11 @@ def run_prediction_pipeline() -> pd.DataFrame:
     logger.info("Step 1/3: fetching latest feature row")
     latest_row, fs = load_latest_row()
 
-    logger.info("Step 2/3: loading best registered model")
-    model, kind = load_best_model()
+    logger.info("Step 2/3: connecting to model registry")
+    mr = get_model_registry()
 
-    logger.info("Step 3/3: predicting next 3 days")
-    predictions = predict_next_3_days(latest_row, model, kind)
+    logger.info("Step 3/3: predicting next 3 days (per-horizon champions)")
+    predictions = predict_next_3_days(latest_row, mr)
     log_predictions(fs, predictions)
 
     return predictions
