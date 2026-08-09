@@ -19,4 +19,4 @@ plotly==6.9.0
 python-dotenv==1.2.2
 
 pyarrow
-streamlit==1.61.1
+streamlit==1.50.0
