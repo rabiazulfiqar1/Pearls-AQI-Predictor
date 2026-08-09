@@ -22,6 +22,7 @@ data/
 *.h5
 *.keras
 
+
 # IDE
 .vscode/
 .idea/
@@ -34,29 +35,9 @@ Thumbs.db
 .cache.sqlite
 *.sqlite
 
-# Working notes - not for public repo
-notes.md
-
-# pip freeze artifacts (debug only)
-requirements_full.txt
-
-# Force-include champion artifacts and analysis outputs
-!models/champion/**/*.joblib
-!models/champion/**/*.json
-!artifacts/**/*.csv
-!models/cqr/**/*.joblib
-
-# Project-specific
-AQI_predict-1.pdf
-anaconda_projects/
-audit_report.md 
-
-# Local-only backups and one-off diagnostics
-notebooks/oldeda.ipynb
-pipelines/check_offline_completeness.py
-pipelines/check_online_store.py
-report/
+# Ignore champion and analysis artifacts locally
+models/champion/**/*.joblib
+artifacts/**/*.csv
+models/cqr/**/*.joblib
 
 REPORT.md
-lstm_eval.png
-lstm_model.png
