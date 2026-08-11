@@ -120,18 +120,19 @@ The latest feature rows are loaded from the repository’s feature-store-based w
 
 ## 7. Model Training and Selection
 
-Several model families were evaluated in the repository to compare predictive behavior. The reported evaluation summary shows that the project compared a naive baseline with linear, tree-based, and gradient-boosted approaches.
+Several model families were evaluated in the repository to compare predictive behavior. The saved classical-model results in [results/shap_pruned_results.csv](results/shap_pruned_results.csv) capture the holdout performance for the pruned Ridge, Random Forest, and XGBoost models across the 24h, 48h, and 72h horizons.
 
 ### 7.1 Holdout comparison summary
 
-| Model | 24h RMSE | 48h RMSE | 72h RMSE |
-|---|---:|---:|---:|
-| Naive | 13.16 | 17.89 | 19.89 |
-| Ridge | 10.44 | 14.30 | 15.30 |
-| Random Forest | 11.32 | 14.53 | 17.81 |
-| XGBoost | 10.95 | 14.30 | 15.48 |
+| Model | 24h RMSE | 24h MAE | 24h R² | 48h RMSE | 48h MAE | 48h R² | 72h RMSE | 72h MAE | 72h R² |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Ridge_pruned | 10.69 | 7.35 | 0.516 | 14.68 | 10.35 | 0.087 | 15.55 | 11.05 | -0.024 |
+| RF_pruned | 11.28 | 7.72 | 0.461 | 14.62 | 10.18 | 0.094 | 18.01 | 14.10 | -0.374 |
+| XGBoost_pruned | 10.82 | 7.40 | 0.504 | 14.16 | 9.92 | 0.150 | 15.51 | 11.81 | -0.019 |
 
-These results indicate that the forecasting task is most reliable at shorter horizons and that the linear baseline performed competitively compared with the more complex models on the repository’s evaluation setup.
+These are holdout scores from the saved evaluation artifact. The corresponding training scores are higher, which is expected because the models are measured on data they were not fit on. Across horizons, the 24h task is clearly the easiest, while the 48h and 72h forecasts show the normal drop in skill that comes with longer lead times.
+
+The earlier naive baseline remains the simplest lower-bound reference in the project’s classical comparison workflow. In the saved artifact available here, the pruned models are the ones with complete RMSE, MAE, and R² rows, so those are the values shown above.
 
 ### 7.2 LSTM experiment results
 
@@ -159,7 +160,11 @@ On the independent holdout set, the same configuration achieved:
 | 48h | 12.72 | 9.16 | 0.141 |
 | 72h | 13.24 | 9.66 | -0.009 |
 
-These results show that the LSTM was competitive at short horizons but that the longer-horizon task remained more difficult.
+These results show that the LSTM was competitive at short horizons but that the longer-horizon task remained more difficult. The horizon-wise R² decay matches the way the AQI signal itself becomes less autocorrelated at longer lead times, which suggests the model is approaching the ceiling imposed by the data rather than simply underfitting.
+
+The broader interpretation is straightforward: if more historical rows become available, especially beyond the current free-tier Hopsworks data volume, the LSTM should have more room to improve. In the current setup, the data size is the main constraint, so better results are most likely to come from a larger training history rather than a radically more complex architecture.
+
+The same evaluation pattern is also consistent with a public-health-oriented forecast system that uses 80%-target conformal intervals: the right failure mode is to be slightly conservative, not overconfident.
 
 ### 7.3 Model choice
 
@@ -174,6 +179,8 @@ The dashboard is implemented in [app/dashboard.py](app/dashboard.py), and the pr
 ### 8.1 Dashboard screenshots
 
 ![Dashboard screenshot 1](dashboard_ss/dashboard1.png)
+
+![AQI alert analysis](dashboard_ss/alert_analysis.png)
 
 ![Dashboard screenshot 2](dashboard_ss/dashbaord2.png)
 

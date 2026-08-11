@@ -28,6 +28,8 @@ The architecture diagram above summarizes the end-to-end flow from Open-Meteo da
 
 [![Current conditions and 3-day forecast](dashboard_ss/dashboard1.png)](dashboard_ss/dashboard1.png)
 
+[![AQI alert analysis](dashboard_ss/alert_analysis.png)](dashboard_ss/alert_analysis.png)
+
 [![Forecast trajectory and history](dashboard_ss/dashbaord2.png)](dashboard_ss/dashbaord2.png)
 
 Live at: [aqi-predictor-pearls.streamlit.app](https://aqi-predictor-pearls.streamlit.app/)
