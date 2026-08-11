@@ -1,5 +1,5 @@
 """
-AQI calculation from raw pollutant concentrations.
+AQI calculation and alert analysis helpers.
 
 Uses the US EPA piecewise linear interpolation formula:
 
@@ -35,6 +35,8 @@ pollutant concentrations. get_category() and get_category_label() ARE
 still used regardless of where the numeric AQI comes from.
 """
 import math
+from collections.abc import Iterable
+from typing import Any
 
 from config.config import AQI_CATEGORIES
 
@@ -193,3 +195,110 @@ def get_category_label(aqi: float | None) ->str | None:
     if aqi_val > 500:
         return "Hazardous"
     return None
+
+
+def get_aqi_alert_level(aqi: float | None) -> str:
+    """Map an AQI value to a simple alert level string."""
+    category = get_category(aqi)
+    if category is None:
+        return "unknown"
+    if category <= 2:
+        return "normal"
+    if category == 3:
+        return "watch"
+    if category == 4:
+        return "warning"
+    return "critical"
+
+
+def get_aqi_health_advice(aqi: float | None) -> str:
+    """Return a short, user-facing action summary for an AQI value."""
+    category = get_category(aqi)
+    if category is None:
+        return "AQI is unavailable, so no alert advice can be generated yet."
+    if category == 1:
+        return "Air quality is good. Normal outdoor activity is fine."
+    if category == 2:
+        return "Air quality is acceptable. Sensitive people should monitor symptoms."
+    if category == 3:
+        return "Sensitive groups should reduce prolonged or heavy outdoor exertion."
+    if category == 4:
+        return "Reduce outdoor exertion and keep sensitive groups indoors if possible."
+    if category == 5:
+        return "Avoid extended outdoor activity and consider rescheduling strenuous plans."
+    return "Everyone should avoid outdoor exposure and follow local guidance."
+
+
+def analyze_aqi_alerts(
+    current_aqi: float | None,
+    forecast_rows: Iterable[dict[str, Any]],
+) -> dict[str, Any]:
+    """Summarize AQI risk across the current reading and forecast values."""
+    forecast_rows = list(forecast_rows)
+    forecast_values: list[tuple[float, dict[str, Any]]] = []
+    for row in forecast_rows:
+        value = row.get("predicted_aqi")
+        try:
+            value = None if value is None else float(value)
+        except (TypeError, ValueError):
+            value = None
+        if value is not None and not math.isnan(value):
+            forecast_values.append((value, row))
+
+    current_label = get_category_label(current_aqi)
+    current_level = get_aqi_alert_level(current_aqi)
+    current_advice = get_aqi_health_advice(current_aqi)
+
+    if forecast_values:
+        peak_aqi, peak_row = max(forecast_values, key=lambda item: item[0])
+        peak_label = get_category_label(peak_aqi)
+        peak_level = get_aqi_alert_level(peak_aqi)
+        peak_horizon = peak_row.get("horizon_hours")
+        peak_forecast_for = peak_row.get("forecast_for")
+    else:
+        peak_aqi = None
+        peak_label = None
+        peak_level = "unknown"
+        peak_horizon = None
+        peak_forecast_for = None
+
+    alert_values = [
+        value for value, _ in forecast_values
+        if get_aqi_alert_level(value) in {"watch", "warning", "critical"}
+    ]
+    has_alert = current_level in {"watch", "warning", "critical"} or bool(alert_values)
+
+    if current_level == "critical" or peak_level == "critical":
+        headline = "Critical AQI alert"
+    elif current_level == "warning" or peak_level == "warning":
+        headline = "AQI warning"
+    elif current_level == "watch" or peak_level == "watch":
+        headline = "AQI watch"
+    else:
+        headline = "AQI looks manageable"
+
+    return {
+        "headline": headline,
+        "has_alert": has_alert,
+        "current": {
+            "aqi": current_aqi,
+            "label": current_label,
+            "alert_level": current_level,
+            "advice": current_advice,
+        },
+        "forecast_peak": {
+            "aqi": peak_aqi,
+            "label": peak_label,
+            "alert_level": peak_level,
+            "horizon_hours": peak_horizon,
+            "forecast_for": peak_forecast_for,
+        },
+        "forecast_rows": [
+            {
+                **row,
+                "aqi_label": get_category_label(row.get("predicted_aqi")),
+                "alert_level": get_aqi_alert_level(row.get("predicted_aqi")),
+            }
+            for row in forecast_rows
+        ],
+    }
