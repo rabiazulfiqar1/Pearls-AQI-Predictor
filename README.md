@@ -81,7 +81,9 @@ results/             # LSTM experiment results and saved outputs
 
 ## Status
 
-The project is implemented and deployed with a working dashboard and inference workflow.
+Deployed and fully operational.
+> **Note:** Automated workflows (`feature_pipeline.yml`, `training_pipeline.yml`) were disabled after submission to stop failures from an unrelated platform issue; code remains intact for review.
+
 
 ## Author
 
