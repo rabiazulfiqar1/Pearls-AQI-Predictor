@@ -29,24 +29,28 @@ SHAP_DIRECTORY = PROJECT_ROOT / "SHAP"
 st.markdown(
     """
     <style>
+    .stApp { background: #f4f7f8; color: #17252b; }
+    [data-testid="stHeader"] { background: #f4f7f8; }
+    [data-testid="stSidebar"] { background: #e8eff1; }
+    h1, h2, h3, p, label { color: #17252b; }
     .metric-card {
-        background: #161b2e;
-        border: 1px solid #262d45;
+        background: #ffffff;
+        border: 1px solid #d5e0e3;
         border-radius: 10px;
         padding: 16px 20px;
         text-align: left;
     }
-    .metric-card .label { color: #8b93b0; font-size: 0.8rem; margin-bottom: 4px; }
-    .metric-card .value { color: #f0f2fa; font-size: 1.8rem; font-weight: 600; line-height: 1.1; }
+    .metric-card .label { color: #60747b; font-size: 0.8rem; margin-bottom: 4px; }
+    .metric-card .value { color: #17252b; font-size: 1.8rem; font-weight: 600; line-height: 1.1; }
     .metric-card .sub { font-size: 0.8rem; margin-top: 4px; }
     .alert-card {
         border-radius: 12px;
         border: 1px solid;
         padding: 16px 18px;
-        background: rgba(255,255,255,0.03);
+        background: #ffffff;
     }
     .alert-card .title { font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }
-    .alert-card .body { color: #d6dbeb; font-size: 0.95rem; }
+    .alert-card .body { color: #40565d; font-size: 0.95rem; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -140,15 +144,15 @@ def render_aqi_gauge(value: float | None) -> go.Figure:
         gauge={
             "axis": {"range": [0, 500], "tickwidth": 1, "dtick": 100},
             "bar": {"color": color, "thickness": 0.3},
-            "bgcolor": "#161b2e",
+            "bgcolor": "#ffffff",
             "borderwidth": 0,
             "steps": [
-                {"range": [0, 50], "color": "#245d43"},
-                {"range": [50, 100], "color": "#6c631d"},
-                {"range": [100, 150], "color": "#70451f"},
-                {"range": [150, 200], "color": "#702c30"},
-                {"range": [200, 300], "color": "#542c63"},
-                {"range": [300, 500], "color": "#4f2724"},
+                {"range": [0, 50], "color": "#d9efe4"},
+                {"range": [50, 100], "color": "#f1edc9"},
+                {"range": [100, 150], "color": "#f4dec4"},
+                {"range": [150, 200], "color": "#f2cccc"},
+                {"range": [200, 300], "color": "#e6d5e9"},
+                {"range": [300, 500], "color": "#e8cbc7"},
             ],
         },
     ))
@@ -257,6 +261,33 @@ with overview_tab:
     with st.expander("Forecast details", expanded=True):
         st.dataframe(predictions[["forecast_for", "horizon_hours", "predicted_aqi", "model_type", "holdout_rmse"]], use_container_width=True, hide_index=True)
 
+    st.subheader("Last 7 days")
+    history = load_history(days=7)
+    history_aqi_col = find_column(list(history.columns), ["us_aqi", "aqi"], exclude=["target", "predicted"])
+    if history_aqi_col is None:
+        st.info("Historical AQI data is not available in the feature group.")
+    else:
+        history_fig = go.Figure(go.Scatter(
+            x=history["timestamp"],
+            y=history[history_aqi_col],
+            mode="lines+markers",
+            line={"color": "#167c80", "width": 3},
+            marker={"color": "#167c80", "size": 5},
+            name="Observed AQI",
+        ))
+        history_fig.update_layout(
+            template="plotly_white",
+            height=380,
+            margin={"l": 10, "r": 10, "t": 10, "b": 10},
+            xaxis_title="Time",
+            yaxis_title="AQI",
+            yaxis={"gridcolor": "#dce6e8"},
+            plot_bgcolor="#ffffff",
+            paper_bgcolor="#ffffff",
+            showlegend=False,
+        )
+        st.plotly_chart(history_fig, use_container_width=True)
+
 with evaluation_tab:
     st.subheader("Why these champion models were selected")
     metric = st.selectbox("Evaluation metric", ["rmse", "mae", "r2"], format_func=lambda value: value.upper(), index=0)
@@ -267,7 +298,7 @@ with evaluation_tab:
     for model in evaluation["model_label"].unique():
         subset = evaluation[evaluation["model_label"] == model]
         evaluation_fig.add_trace(go.Bar(x=subset["horizon_label"], y=subset[metric], name=model))
-    evaluation_fig.update_layout(barmode="group", template="plotly_dark", height=430, yaxis_title=metric.upper(), xaxis_title="Forecast horizon")
+    evaluation_fig.update_layout(barmode="group", template="plotly_white", height=430, yaxis_title=metric.upper(), xaxis_title="Forecast horizon", plot_bgcolor="#ffffff", paper_bgcolor="#ffffff")
     st.plotly_chart(evaluation_fig, use_container_width=True)
     st.caption("For RMSE and MAE, lower is better. For R², higher is better. The champion is selected independently for each horizon.")
     winners = evaluation.loc[evaluation.groupby("horizon")[metric].idxmin() if metric != "r2" else evaluation.groupby("horizon")[metric].idxmax()].copy()
@@ -281,7 +312,7 @@ with shap_tab:
     shap_horizon = st.selectbox("Forecast horizon", [24, 48, 72], format_func=lambda value: f"{value} hours", index=0)
     shap_data = load_shap_results(shap_horizon).head(15).sort_values("mean_abs_shap")
     shap_fig = go.Figure(go.Bar(x=shap_data["mean_abs_shap"], y=shap_data["feature"], orientation="h", marker_color="#55c2a5"))
-    shap_fig.update_layout(template="plotly_dark", height=560, xaxis_title="Mean absolute SHAP value", yaxis_title="Feature")
+    shap_fig.update_layout(template="plotly_white", height=560, xaxis_title="Mean absolute SHAP value", yaxis_title="Feature", plot_bgcolor="#ffffff", paper_bgcolor="#ffffff")
     st.plotly_chart(shap_fig, use_container_width=True)
     st.caption("Higher mean absolute SHAP values indicate greater average influence on the model output. They do not show whether a feature raises or lowers an individual forecast.")
     with st.expander("Selected SHAP features", expanded=True):
