@@ -98,6 +98,17 @@ st.markdown(
     }}
     .stTabs [data-baseweb="tab"][aria-selected="true"] p,
     .stTabs [data-baseweb="tab"][aria-selected="true"] span {{ color: #ffffff !important; }}
+    div[data-baseweb="select"] > div {{
+        background: #e9eef6;
+        border: 2px solid {ACCENT};
+        border-radius: 7px;
+        color: {TEXT_PRIMARY};
+    }}
+    div[data-baseweb="select"] span {{ color: {TEXT_PRIMARY} !important; font-weight: 700; }}
+    div[data-baseweb="popover"] {{ background: {BG_CARD}; border: 1px solid {BORDER}; }}
+    div[role="listbox"] {{ background: {BG_CARD}; }}
+    div[role="option"] {{ color: {TEXT_PRIMARY} !important; background: {BG_CARD}; }}
+    div[role="option"][aria-selected="true"] {{ background: #dce9f8; color: {ACCENT} !important; font-weight: 700; }}
     .metric-card {{
         background: {BG_CARD};
         border: 1px solid {BORDER};
@@ -149,13 +160,19 @@ def style_table(frame: pd.DataFrame):
                 ("background-color", ACCENT),
                 ("color", "#ffffff"),
                 ("font-weight", "700"),
+                ("font-size", "0.9rem"),
+                ("padding", "10px 12px"),
                 ("text-align", "left"),
                 ("border", f"1px solid {ACCENT}"),
             ],
         },
         {
             "selector": "td",
-            "props": [("border", f"1px solid {BORDER}")],
+            "props": [
+                ("border", f"1px solid {BORDER}"),
+                ("padding", "8px 12px"),
+                ("color", TEXT_PRIMARY),
+            ],
         },
     ])
 
@@ -353,7 +370,7 @@ with overview_tab:
         </div>""", unsafe_allow_html=True,
     )
     with st.expander("Forecast alert details", expanded=True):
-        st.dataframe(pd.DataFrame(alert_analysis["forecast_rows"]), use_container_width=True, hide_index=True)
+        st.dataframe(style_table(pd.DataFrame(alert_analysis["forecast_rows"])), use_container_width=True, hide_index=True)
 
     st.subheader("Forecast trajectory")
     base_time = predictions["generated_at"].iloc[0]
@@ -382,7 +399,7 @@ with overview_tab:
     )
     st.plotly_chart(forecast_fig, use_container_width=True)
     with st.expander("Forecast details", expanded=True):
-        st.dataframe(predictions[["forecast_for", "horizon_hours", "predicted_aqi", "model_type", "holdout_rmse"]], use_container_width=True, hide_index=True)
+        st.dataframe(style_table(predictions[["forecast_for", "horizon_hours", "predicted_aqi", "model_type", "holdout_rmse"]]), use_container_width=True, hide_index=True)
 
     st.subheader("Last 7 days")
     history = load_history(days=7)
@@ -440,9 +457,9 @@ with evaluation_tab:
     st.caption("For RMSE and MAE, lower is better. For R², higher is better. The champion is selected independently for each horizon.")
     winners = evaluation.loc[evaluation.groupby("horizon")[metric].idxmin() if metric != "r2" else evaluation.groupby("horizon")[metric].idxmax()].copy()
     winners["Selection"] = winners.apply(lambda row: f"{row['model_label']} selected for {int(row['horizon'])}h", axis=1)
-    st.dataframe(winners[["horizon_label", "Selection", metric]], use_container_width=True, hide_index=True)
+    st.dataframe(style_table(winners[["horizon_label", "Selection", metric]]), use_container_width=True, hide_index=True)
     with st.expander("Full holdout metrics", expanded=True):
-        st.dataframe(evaluation[["model_label", "horizon_label", "rmse", "mae", "r2"]], use_container_width=True, hide_index=True)
+        st.dataframe(style_table(evaluation[["model_label", "horizon_label", "rmse", "mae", "r2"]]), use_container_width=True, hide_index=True)
 
 with shap_tab:
     st.subheader("Global SHAP feature importance")
@@ -453,7 +470,7 @@ with shap_tab:
     st.plotly_chart(shap_fig, use_container_width=True)
     st.caption("Higher mean absolute SHAP values indicate greater average influence on the model output. They do not show whether a feature raises or lowers an individual forecast.")
     with st.expander("Selected SHAP features", expanded=True):
-        st.dataframe(shap_data.sort_values("mean_abs_shap", ascending=False), use_container_width=True, hide_index=True)
+        st.dataframe(style_table(shap_data.sort_values("mean_abs_shap", ascending=False)), use_container_width=True, hide_index=True)
 
 with eda_tab:
     st.subheader("Exploratory data analysis insights")
