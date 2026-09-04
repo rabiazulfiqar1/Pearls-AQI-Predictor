@@ -29,28 +29,28 @@ SHAP_DIRECTORY = PROJECT_ROOT / "SHAP"
 st.markdown(
     """
     <style>
-    .stApp { background: #f4f7f8; color: #17252b; }
-    [data-testid="stHeader"] { background: #f4f7f8; }
-    [data-testid="stSidebar"] { background: #e8eff1; }
-    h1, h2, h3, p, label { color: #17252b; }
+    .stApp { background: #0f1117; color: #f0f2fa; }
+    [data-testid="stHeader"] { background: #0f1117; }
+    [data-testid="stSidebar"] { background: #171a21; }
+    h1, h2, h3, p, label { color: #f0f2fa; }
     .metric-card {
-        background: #ffffff;
-        border: 1px solid #d5e0e3;
+        background: #171a21;
+        border: 1px solid #343a46;
         border-radius: 10px;
         padding: 16px 20px;
         text-align: left;
     }
-    .metric-card .label { color: #60747b; font-size: 0.8rem; margin-bottom: 4px; }
-    .metric-card .value { color: #17252b; font-size: 1.8rem; font-weight: 600; line-height: 1.1; }
+    .metric-card .label { color: #a3acbd; font-size: 0.8rem; margin-bottom: 4px; }
+    .metric-card .value { color: #f0f2fa; font-size: 1.8rem; font-weight: 600; line-height: 1.1; }
     .metric-card .sub { font-size: 0.8rem; margin-top: 4px; }
     .alert-card {
         border-radius: 12px;
         border: 1px solid;
         padding: 16px 18px;
-        background: #ffffff;
+        background: #171a21;
     }
     .alert-card .title { font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }
-    .alert-card .body { color: #40565d; font-size: 0.95rem; }
+    .alert-card .body { color: #d6dbeb; font-size: 0.95rem; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -144,7 +144,7 @@ def render_aqi_gauge(value: float | None) -> go.Figure:
         gauge={
             "axis": {"range": [0, 500], "tickwidth": 1, "dtick": 100},
             "bar": {"color": color, "thickness": 0.3},
-            "bgcolor": "#ffffff",
+            "bgcolor": "#171a21",
             "borderwidth": 0,
             "steps": [
                 {"range": [0, 50], "color": "#d9efe4"},
@@ -156,7 +156,14 @@ def render_aqi_gauge(value: float | None) -> go.Figure:
             ],
         },
     ))
-    figure.update_layout(height=310, margin={"l": 20, "r": 20, "t": 55, "b": 10})
+    figure.update_layout(
+        template="plotly_dark",
+        height=310,
+        margin={"l": 20, "r": 20, "t": 55, "b": 10},
+        paper_bgcolor="#0f1117",
+        plot_bgcolor="#0f1117",
+        font={"color": "#f0f2fa"},
+    )
     return figure
 
 
@@ -223,7 +230,16 @@ with overview_tab:
                 x=pollutant_frame["value"], y=pollutant_frame["pollutant"], orientation="h",
                 marker_color="#55c2a5", text=pollutant_frame["value"].round(2), textposition="auto",
             ))
-            pollutant_fig.update_layout(title="Pollutant levels", height=260, margin={"l": 10, "r": 10, "t": 45, "b": 10})
+            pollutant_fig.update_layout(
+                title="Pollutant levels",
+                template="plotly_dark",
+                height=260,
+                margin={"l": 10, "r": 10, "t": 45, "b": 10},
+                paper_bgcolor="#0f1117",
+                plot_bgcolor="#0f1117",
+                font={"color": "#f0f2fa"},
+                xaxis={"gridcolor": "#343a46"},
+            )
             st.plotly_chart(pollutant_fig, use_container_width=True)
 
     if any(v is None for k, v in conditions.items() if k != "_detected_columns"):
@@ -256,7 +272,15 @@ with overview_tab:
     forecast_fig = go.Figure()
     forecast_fig.add_trace(go.Scatter(x=x_values + x_values[::-1], y=upper + lower[::-1], fill="toself", fillcolor="rgba(80,140,255,0.15)", line={"color": "rgba(0,0,0,0)"}, hoverinfo="skip", name="Approx. 80% interval"))
     forecast_fig.add_trace(go.Scatter(x=x_values, y=y_values, mode="lines+markers", line={"color": "#5b8dff", "width": 3}, name="Predicted AQI"))
-    forecast_fig.update_layout(template="plotly_dark", height=420, xaxis_title="Time", yaxis_title="AQI")
+    forecast_fig.update_layout(
+        template="plotly_dark",
+        height=420,
+        xaxis_title="Time",
+        yaxis_title="AQI",
+        paper_bgcolor="#0f1117",
+        plot_bgcolor="#0f1117",
+        font={"color": "#f0f2fa"},
+    )
     st.plotly_chart(forecast_fig, use_container_width=True)
     with st.expander("Forecast details", expanded=True):
         st.dataframe(predictions[["forecast_for", "horizon_hours", "predicted_aqi", "model_type", "holdout_rmse"]], use_container_width=True, hide_index=True)
@@ -267,23 +291,33 @@ with overview_tab:
     if history_aqi_col is None:
         st.info("Historical AQI data is not available in the feature group.")
     else:
-        history_fig = go.Figure(go.Scatter(
+        history_fig = go.Figure()
+        for low, high, _label, band_color in AQI_CATEGORIES:
+            history_fig.add_hrect(
+                y0=low,
+                y1=min(high, 300),
+                fillcolor=band_color,
+                opacity=0.10,
+                line_width=0,
+            )
+        history_fig.add_trace(go.Scatter(
             x=history["timestamp"],
             y=history[history_aqi_col],
             mode="lines+markers",
-            line={"color": "#167c80", "width": 3},
-            marker={"color": "#167c80", "size": 5},
+            line={"color": "#f0f2fa", "width": 2},
+            marker={"color": "#f0f2fa", "size": 4},
             name="Observed AQI",
         ))
         history_fig.update_layout(
-            template="plotly_white",
+            template="plotly_dark",
             height=380,
             margin={"l": 10, "r": 10, "t": 10, "b": 10},
             xaxis_title="Time",
             yaxis_title="AQI",
-            yaxis={"gridcolor": "#dce6e8"},
-            plot_bgcolor="#ffffff",
-            paper_bgcolor="#ffffff",
+            yaxis={"gridcolor": "#343a46", "range": [0, 300]},
+            plot_bgcolor="#0f1117",
+            paper_bgcolor="#0f1117",
+            font={"color": "#f0f2fa"},
             showlegend=False,
         )
         st.plotly_chart(history_fig, use_container_width=True)
@@ -298,7 +332,16 @@ with evaluation_tab:
     for model in evaluation["model_label"].unique():
         subset = evaluation[evaluation["model_label"] == model]
         evaluation_fig.add_trace(go.Bar(x=subset["horizon_label"], y=subset[metric], name=model))
-    evaluation_fig.update_layout(barmode="group", template="plotly_white", height=430, yaxis_title=metric.upper(), xaxis_title="Forecast horizon", plot_bgcolor="#ffffff", paper_bgcolor="#ffffff")
+    evaluation_fig.update_layout(
+        barmode="group",
+        template="plotly_dark",
+        height=430,
+        yaxis_title=metric.upper(),
+        xaxis_title="Forecast horizon",
+        plot_bgcolor="#0f1117",
+        paper_bgcolor="#0f1117",
+        font={"color": "#f0f2fa"},
+    )
     st.plotly_chart(evaluation_fig, use_container_width=True)
     st.caption("For RMSE and MAE, lower is better. For R², higher is better. The champion is selected independently for each horizon.")
     winners = evaluation.loc[evaluation.groupby("horizon")[metric].idxmin() if metric != "r2" else evaluation.groupby("horizon")[metric].idxmax()].copy()
@@ -312,7 +355,15 @@ with shap_tab:
     shap_horizon = st.selectbox("Forecast horizon", [24, 48, 72], format_func=lambda value: f"{value} hours", index=0)
     shap_data = load_shap_results(shap_horizon).head(15).sort_values("mean_abs_shap")
     shap_fig = go.Figure(go.Bar(x=shap_data["mean_abs_shap"], y=shap_data["feature"], orientation="h", marker_color="#55c2a5"))
-    shap_fig.update_layout(template="plotly_white", height=560, xaxis_title="Mean absolute SHAP value", yaxis_title="Feature", plot_bgcolor="#ffffff", paper_bgcolor="#ffffff")
+    shap_fig.update_layout(
+        template="plotly_dark",
+        height=560,
+        xaxis_title="Mean absolute SHAP value",
+        yaxis_title="Feature",
+        plot_bgcolor="#0f1117",
+        paper_bgcolor="#0f1117",
+        font={"color": "#f0f2fa"},
+    )
     st.plotly_chart(shap_fig, use_container_width=True)
     st.caption("Higher mean absolute SHAP values indicate greater average influence on the model output. They do not show whether a feature raises or lowers an individual forecast.")
     with st.expander("Selected SHAP features", expanded=True):
