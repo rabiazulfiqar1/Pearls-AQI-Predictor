@@ -8,6 +8,18 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+try:
+    st._config.set_option("theme.base", "light")
+    st._config.set_option("theme.backgroundColor", "#f7f9fc")
+    st._config.set_option("theme.secondaryBackgroundColor", "#ffffff")
+    st._config.set_option("theme.textColor", "#1a1d29")
+    st._config.set_option("theme.primaryColor", "#0f766e")
+    st._config.set_option("theme.font", "sans serif")
+except Exception:
+    # Private API — if it ever breaks across Streamlit versions, fall back to
+    # a .streamlit/config.toml with the same [theme] values instead.
+    pass
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from models.predict import (
@@ -34,6 +46,9 @@ BORDER = "#e1e5ee"         # card + gridline borders
 TEXT_PRIMARY = "#1a1d29"   # body text
 TEXT_SECONDARY = "#6b7280" # captions / muted labels
 ACCENT = "#0f766e"         # single accent color for all headings
+GRIDLINE = "#c7cedb"       # darker, clearly visible gridlines on the light bg
+LINE_PRIMARY = "#1d4ed8"   # strong blue for the main forecast/observed line
+LINE_BAND = "#93a5c9"      # muted blue-gray for the confidence band outline
 PLOTLY_TEMPLATE = "plotly_white"
 
 # AQI category thresholds (US EPA) — used for coloring + band shading
@@ -156,12 +171,32 @@ def load_shap_results(horizon: int) -> pd.DataFrame:
 
 
 def _apply_chart_theme(figure: go.Figure, **layout_kwargs: Any) -> go.Figure:
-    """Apply the single shared theme to every Plotly figure in the app."""
+    """Apply the single shared theme to every Plotly figure in the app.
+
+    Any caller-supplied ``xaxis``/``yaxis`` dicts are merged on top of the
+    default axis styling instead of overwriting it, so gridlines/tick colors
+    stay consistent everywhere while callers can still set things like
+    ``range``.
+    """
+    default_axis = {
+        "gridcolor": GRIDLINE,
+        "zerolinecolor": GRIDLINE,
+        "linecolor": GRIDLINE,
+        "tickfont": {"color": TEXT_PRIMARY},
+        "title": {"font": {"color": TEXT_PRIMARY}},
+    }
+    xaxis = {**default_axis, **layout_kwargs.pop("xaxis", {})}
+    yaxis = {**default_axis, **layout_kwargs.pop("yaxis", {})}
+    legend = {"font": {"color": TEXT_PRIMARY}, **layout_kwargs.pop("legend", {})}
+
     figure.update_layout(
         template=PLOTLY_TEMPLATE,
         paper_bgcolor=BG_PAGE,
-        plot_bgcolor=BG_PAGE,
-        font={"color": TEXT_PRIMARY},
+        plot_bgcolor=BG_CARD,
+        font={"color": TEXT_PRIMARY, "size": 13},
+        xaxis=xaxis,
+        yaxis=yaxis,
+        legend=legend,
         **layout_kwargs,
     )
     return figure
@@ -261,7 +296,6 @@ with overview_tab:
                 title="Pollutant levels",
                 height=260,
                 margin={"l": 10, "r": 10, "t": 45, "b": 10},
-                xaxis={"gridcolor": BORDER},
             )
             st.plotly_chart(pollutant_fig, use_container_width=True)
 
@@ -294,14 +328,19 @@ with overview_tab:
     forecast_fig = go.Figure()
     forecast_fig.add_trace(go.Scatter(
         x=x_values + x_values[::-1], y=upper + lower[::-1], fill="toself",
-        fillcolor="rgba(15,118,110,0.12)", line={"color": "rgba(0,0,0,0)"},
+        fillcolor="rgba(29,78,216,0.14)", line={"color": LINE_BAND, "width": 1},
         hoverinfo="skip", name="Approx. 80% interval",
     ))
     forecast_fig.add_trace(go.Scatter(
         x=x_values, y=y_values, mode="lines+markers",
-        line={"color": ACCENT, "width": 3}, name="Predicted AQI",
+        line={"color": LINE_PRIMARY, "width": 3},
+        marker={"color": LINE_PRIMARY, "size": 7, "line": {"color": BG_CARD, "width": 1}},
+        name="Predicted AQI",
     ))
-    _apply_chart_theme(forecast_fig, height=420, xaxis_title="Time", yaxis_title="AQI")
+    _apply_chart_theme(
+        forecast_fig, height=420, xaxis_title="Time", yaxis_title="AQI",
+        legend={"orientation": "h", "y": 1.1, "font": {"color": TEXT_PRIMARY}},
+    )
     st.plotly_chart(forecast_fig, use_container_width=True)
     with st.expander("Forecast details", expanded=True):
         st.dataframe(predictions[["forecast_for", "horizon_hours", "predicted_aqi", "model_type", "holdout_rmse"]], use_container_width=True, hide_index=True)
@@ -318,15 +357,16 @@ with overview_tab:
                 y0=low,
                 y1=min(high, 300),
                 fillcolor=band_color,
-                opacity=0.10,
+                opacity=0.22,
                 line_width=0,
+                layer="below",
             )
         history_fig.add_trace(go.Scatter(
             x=history["timestamp"],
             y=history[history_aqi_col],
             mode="lines+markers",
-            line={"color": TEXT_PRIMARY, "width": 2},
-            marker={"color": TEXT_PRIMARY, "size": 4},
+            line={"color": LINE_PRIMARY, "width": 3},
+            marker={"color": LINE_PRIMARY, "size": 5, "line": {"color": BG_CARD, "width": 1}},
             name="Observed AQI",
         ))
         _apply_chart_theme(
@@ -335,7 +375,7 @@ with overview_tab:
             margin={"l": 10, "r": 10, "t": 10, "b": 10},
             xaxis_title="Time",
             yaxis_title="AQI",
-            yaxis={"gridcolor": BORDER, "range": [0, 300]},
+            yaxis={"range": [0, 300]},
             showlegend=False,
         )
         st.plotly_chart(history_fig, use_container_width=True)
