@@ -78,6 +78,26 @@ st.markdown(
     p, label, span, div {{ color: {TEXT_PRIMARY}; }}
     h1, h2, h3 {{ color: {ACCENT} !important; }}
     .stCaption, [data-testid="stCaptionContainer"] {{ color: {TEXT_SECONDARY} !important; }}
+    .stTabs [data-baseweb="tab-list"] {{ gap: 6px; border-bottom: 2px solid {BORDER}; }}
+    .stTabs [data-baseweb="tab"] {{
+        height: 44px;
+        padding: 0 18px;
+        border: 1px solid {BORDER};
+        border-bottom: 0;
+        border-radius: 8px 8px 0 0;
+        background: #e9eef6;
+        color: #526174 !important;
+        font-weight: 700;
+    }}
+    .stTabs [data-baseweb="tab"] p,
+    .stTabs [data-baseweb="tab"] span {{ color: #526174 !important; font-weight: 700; }}
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {{
+        background: {ACCENT};
+        border-color: {ACCENT};
+        color: #ffffff !important;
+    }}
+    .stTabs [data-baseweb="tab"][aria-selected="true"] p,
+    .stTabs [data-baseweb="tab"][aria-selected="true"] span {{ color: #ffffff !important; }}
     .metric-card {{
         background: {BG_CARD};
         border: 1px solid {BORDER};
@@ -119,6 +139,25 @@ def find_column(columns: list[str], keywords: list[str], exclude: list[str] | No
             if kw in cl and not any(ex in cl for ex in exclude):
                 return c
     return None
+
+
+def style_table(frame: pd.DataFrame):
+    return frame.style.set_table_styles([
+        {
+            "selector": "th",
+            "props": [
+                ("background-color", ACCENT),
+                ("color", "#ffffff"),
+                ("font-weight", "700"),
+                ("text-align", "left"),
+                ("border", f"1px solid {ACCENT}"),
+            ],
+        },
+        {
+            "selector": "td",
+            "props": [("border", f"1px solid {BORDER}")],
+        },
+    ])
 
 
 def get_current_conditions(latest_row: pd.DataFrame) -> dict[str, Any]:
