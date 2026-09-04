@@ -57,6 +57,26 @@ The dashboard uses the inference logic in [models/predict.py](models/predict.py)
 
 <img src="architecture.png" alt="System architecture" style="max-width: 800px; width: 100%; height: auto; display: block; margin: 0 auto;" />
 
+### 3.1 Technology stack and CI/CD
+
+The project is implemented in Python 3.11. The main tools and services are:
+
+| Area | Tools and technologies | Role in the system |
+|---|---|---|
+| Data ingestion | Open-Meteo API, `requests-cache`, `retry-requests` | Retrieves hourly air-quality and weather observations with caching and retry support. |
+| Data processing | Pandas, NumPy, PyArrow | Cleans, transforms, stores, and prepares time-series features. |
+| Feature store and registry | Hopsworks Feature Store and Model Registry, Delta Lake | Stores engineered features and versioned champion models for each forecast horizon. |
+| Classical machine learning | scikit-learn Ridge and Random Forest, XGBoost | Trains and evaluates the classical forecasting models. |
+| Deep learning and explainability | TensorFlow/Keras LSTM, SHAP | Runs the sequence-model experiments and ranks influential features for model pruning. |
+| Automation and CI/CD | GitHub Actions, `pip` dependency caching, Ubuntu runners | Automates hourly feature updates and daily champion retraining and registration. |
+| Serving and visualization | Streamlit, Plotly | Provides the public dashboard, forecast charts, and alert presentation. |
+| API layer | FastAPI, Uvicorn, Pydantic | Exposes health and prediction endpoints through the backend service. |
+| Configuration and artifacts | `python-dotenv`, Joblib, JSON/CSV files | Loads secrets from environment variables and persists model and feature metadata. |
+
+The CI/CD workflow is split into two scheduled GitHub Actions jobs. The hourly feature pipeline checks out the repository, installs the pinned dependencies with Python 3.11, fetches the latest Open-Meteo data, engineers the features, and writes them to Hopsworks. The daily champion-retraining pipeline trains Ridge for 24h and XGBoost for 48h/72h, applies a regression guard, and registers successful models in the Hopsworks Model Registry. Both jobs can also be started manually from GitHub Actions, and Hopsworks credentials are supplied through repository secrets rather than stored in source code.
+
+The workflow definitions remain in [.github/workflows](.github/workflows). After submission, the scheduled workflows were disabled because of an unrelated platform issue; the automation code remains part of the repository and is documented here as the intended production workflow.
+
 ---
 
 ## 4. Data Sources
@@ -93,7 +113,7 @@ The time-series view confirms that AQI shows temporal structure and persistence,
 
 ![SHAP importance for the 24h horizon](EDA-outputs/shap_importance_24h.png)
 
-The SHAP output helps explain which variables contributed most strongly to the model’s decision-making and supports the feature-selection process used in the project.
+SHAP explainability and the resulting horizon-specific feature selection are discussed in [Section 7.3](#73-shap-explainability-and-feature-selection).
 
 ---
 
@@ -166,7 +186,29 @@ The broader interpretation is straightforward: if more historical rows become av
 
 The same evaluation pattern is also consistent with a public-health-oriented forecast system that uses 80%-target conformal intervals: the right failure mode is to be slightly conservative, not overconfident.
 
-### 7.3 Model choice
+### 7.3 SHAP explainability and feature selection
+
+SHAP (SHapley Additive exPlanations) was used to make the feature-selection step more interpretable. For each forecast horizon, the analysis calculated the mean absolute SHAP value for each candidate feature and ranked features by their average contribution magnitude across the evaluation data. The top 15 features from each ranking were then used to train the corresponding production champion model, so the 24h, 48h, and 72h models can use different feature subsets.
+
+The selected champion and the five highest-ranked features for each horizon were:
+
+| Horizon | Champion | Top SHAP-ranked features (in descending order) |
+|---|---|---|
+| 24h | Ridge | `pm2_5`, `us_aqi`, `month_cos`, `aqi_change_rate_1h`, `aqi_lag_24h` |
+| 48h | XGBoost | `rolling_30day_avg`, `us_aqi`, `month_cos`, `pm2_5`, `pressure_msl` |
+| 72h | XGBoost | `rolling_30day_avg`, `month_cos`, `rolling_30day_std`, `us_aqi`, `pm2_5` |
+
+![SHAP importance for the 24h horizon](EDA-outputs/shap_importance_24h.png)
+
+![SHAP importance for the 48h horizon](EDA-outputs/shap_importance_48h.png)
+
+![SHAP importance for the 72h horizon](SHAP/shap_importance_72h.png)
+
+The rankings show a clear change with forecast distance. The 24h model relies most strongly on current PM2.5, the current US AQI value, and recent AQI dynamics. At 48h and 72h, the 30-day rolling AQI average becomes the strongest signal, followed by seasonal structure such as `month_cos`; longer-range forecasts therefore depend more on baseline conditions and seasonality than on the latest pollutant measurement alone. The increasing importance of rolling statistics also supports the use of temporal aggregation in the feature pipeline.
+
+These are global importance results: a larger mean absolute SHAP value means that a feature generally changes the model output more, but it does not indicate whether that feature increases or decreases a particular forecast. Directional explanations would require dependence plots or local SHAP explanations for individual predictions. The SHAP rankings should also be interpreted as model associations rather than causal effects, since correlated pollutant and temporal variables can share attribution.
+
+### 7.4 Model choice
 
 The repository’s modeling workflow is built around comparing several approaches while keeping the feature definitions consistent. That makes it possible to judge whether a simpler model is sufficient or whether a more expressive model is justified.
 
@@ -200,7 +242,9 @@ At inference time, the pipeline:
 3. generates the 24h/48h/72h forecast values,
 4. returns the results to the interface for display.
 
-The repository also includes a FastAPI backend in [backend/main.py](backend/main.py) with health and prediction endpoints under [backend](backend). The Streamlit dashboard loads models directly from Hopsworks and caches them on first run, so it does not require a separate backend deployment to function in the local workflow.
+The repository also includes a FastAPI backend in [backend/main.py](backend/main.py) with health and prediction endpoints under [backend](backend), but this API is currently a local/repository service and is not publicly deployed. The live Streamlit app does not call FastAPI: it imports [models/predict.py](models/predict.py) directly, reads the latest feature data from Hopsworks, and downloads the registered champion models. Therefore, Streamlit Cloud can run the dashboard directly from GitHub without FastAPI, provided that `HOPSWORKS_API_KEY` and `HOPSWORKS_PROJECT` are configured in the app's Streamlit Secrets.
+
+The first Streamlit load can still be slow because it must authenticate with Hopsworks, read the feature group, and download three model artifacts. Hopsworks sessions and service handles are cached in [utils/hopsworks_client.py](utils/hopsworks_client.py), and the dashboard caches the resulting forecast. Deploying FastAPI would improve the user experience only after the dashboard is changed to call a deployed API whose models and feature data are already warm or cached; deploying the current backend unchanged would not remove the Hopsworks startup work.
 
 ---
 

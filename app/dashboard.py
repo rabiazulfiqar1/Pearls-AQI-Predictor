@@ -21,6 +21,10 @@ from utils.hopsworks_client import get_feature_store, get_model_registry
 
 st.set_page_config(page_title="Karachi AQI Predictor", page_icon="🌫️", layout="wide")
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+EVALUATION_RESULTS = PROJECT_ROOT / "results" / "shap_pruned_results.csv"
+SHAP_DIRECTORY = PROJECT_ROOT / "SHAP"
+
 # Styling 
 st.markdown(
     """
@@ -114,6 +118,45 @@ def get_current_conditions(latest_row: pd.DataFrame) -> dict[str, Any]:
 
 
 @st.cache_data(show_spinner=False)
+def load_evaluation_results() -> pd.DataFrame:
+    return pd.read_csv(EVALUATION_RESULTS)
+
+
+@st.cache_data(show_spinner=False)
+def load_shap_results(horizon: int) -> pd.DataFrame:
+    path = SHAP_DIRECTORY / f"shap_importance_{horizon}h.csv"
+    result = pd.read_csv(path)
+    return result.sort_values("mean_abs_shap", ascending=False)
+
+
+def render_aqi_gauge(value: float | None) -> go.Figure:
+    display_value = value if value is not None else 0
+    label, color = aqi_category(display_value)
+    figure = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=display_value,
+        number={"font": {"size": 42}, "suffix": " AQI"},
+        title={"text": f"<b>{label}</b>", "font": {"size": 18, "color": color}},
+        gauge={
+            "axis": {"range": [0, 500], "tickwidth": 1, "dtick": 100},
+            "bar": {"color": color, "thickness": 0.3},
+            "bgcolor": "#161b2e",
+            "borderwidth": 0,
+            "steps": [
+                {"range": [0, 50], "color": "#245d43"},
+                {"range": [50, 100], "color": "#6c631d"},
+                {"range": [100, 150], "color": "#70451f"},
+                {"range": [150, 200], "color": "#702c30"},
+                {"range": [200, 300], "color": "#542c63"},
+                {"range": [300, 500], "color": "#4f2724"},
+            ],
+        },
+    ))
+    figure.update_layout(height=310, margin={"l": 20, "r": 20, "t": 55, "b": 10})
+    return figure
+
+
+@st.cache_data(show_spinner=False)
 def load_history(days: int = 7) -> pd.DataFrame:
     fs = get_feature_store()
     fg = fs.get_feature_group(FEATURE_GROUP_NAME, version=FEATURE_GROUP_VERSION)
@@ -134,198 +177,136 @@ def load_forecast() -> tuple[pd.DataFrame, dict[str, Any]]:
 
 
 st.title("🌫️ Karachi AQI Predictor")
-st.caption("Live 3-day forecast — separate champion model per horizon (24h Ridge, 48h/72h XGBoost)")
+st.caption("Live 3-day forecast | 24h Ridge | 48h/72h XGBoost")
 
 with st.spinner("Loading latest conditions and forecast..."):
     predictions, conditions = load_forecast()
     alert_analysis = analyze_aqi_alerts(conditions["current_aqi"], predictions.to_dict("records"))
 
-# Current conditions row
-c1, c2, c3, c4 = st.columns(4)
+overview_tab, evaluation_tab, shap_tab, eda_tab = st.tabs([
+    "Current AQI", "Model evaluation", "SHAP explainability", "EDA insights"
+])
 
-with c1:
-    if conditions["current_aqi"] is not None:
-        label, color = aqi_category(conditions["current_aqi"])
-        st.markdown(
-            f"""<div class="metric-card">
-                <div class="label">Current AQI</div>
-                <div class="value">{conditions['current_aqi']:.0f}</div>
-                <div class="sub" style="color:{color}">{label}</div>
-            </div>""",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            """<div class="metric-card"><div class="label">Current AQI</div>
-            <div class="value">N/A</div></div>""",
-            unsafe_allow_html=True,
-        )
+with overview_tab:
+    gauge_col, conditions_col = st.columns([1, 1.5])
+    with gauge_col:
+        st.subheader("Current air quality")
+        st.plotly_chart(render_aqi_gauge(conditions["current_aqi"]), use_container_width=True)
+        st.caption("AQI scale: 0 = good air quality, 500 = hazardous.")
 
-with c2:
-    val = conditions["temperature"]
+    with conditions_col:
+        st.subheader("Live conditions")
+        metric_columns = st.columns(2)
+        values = [
+            ("Temperature", conditions["temperature"], "°C", ".1f"),
+            ("Relative humidity", conditions["humidity"], "%", ".0f"),
+            ("PM2.5", conditions["pm25"], " µg/m³", ".1f"),
+            ("Current AQI", conditions["current_aqi"], "", ".0f"),
+        ]
+        for column, (label, value, suffix, format_spec) in zip(metric_columns * 2, values):
+            with column:
+                display_value = f"{value:{format_spec}}{suffix}" if value is not None else "N/A"
+                st.metric(label, display_value)
+
+        latest_pollutants = load_history(days=1).tail(1)
+        pollutant_columns = ["pm2_5", "pm10", "o3", "no2", "so2", "co"]
+        available_pollutants = [c for c in pollutant_columns if c in latest_pollutants.columns]
+        if available_pollutants:
+            pollutant_frame = latest_pollutants[available_pollutants].T.rename(columns={latest_pollutants.index[-1]: "value"})
+            pollutant_frame["value"] = pd.to_numeric(pollutant_frame["value"], errors="coerce")
+            pollutant_frame = pollutant_frame.dropna().reset_index().rename(columns={"index": "pollutant"})
+            pollutant_fig = go.Figure(go.Bar(
+                x=pollutant_frame["value"], y=pollutant_frame["pollutant"], orientation="h",
+                marker_color="#55c2a5", text=pollutant_frame["value"].round(2), textposition="auto",
+            ))
+            pollutant_fig.update_layout(title="Pollutant levels", height=260, margin={"l": 10, "r": 10, "t": 45, "b": 10})
+            st.plotly_chart(pollutant_fig, use_container_width=True)
+
+    if any(v is None for k, v in conditions.items() if k != "_detected_columns"):
+        with st.expander("Missing current-condition fields", expanded=True):
+            st.write("Some values could not be auto-detected from the feature group.")
+            st.json(conditions["_detected_columns"])
+
+    st.subheader("AQI alert analysis")
+    alert_level = alert_analysis["forecast_peak"]["alert_level"]
+    alert_colors = {"normal": "#2ecc71", "watch": "#f4d03f", "warning": "#e67e22", "critical": "#e74c3c", "unknown": "#8b93b0"}
+    alert_color = alert_colors.get(alert_level, "#8b93b0")
     st.markdown(
-        f"""<div class="metric-card">
-            <div class="label">Temperature</div>
-            <div class="value">{f"{val:.1f}°C" if val is not None else "N/A"}</div>
-        </div>""",
-        unsafe_allow_html=True,
+        f"""<div class="alert-card" style="border-color:{alert_color};">
+            <div class="title" style="color:{alert_color};">{alert_analysis['headline']}</div>
+            <div class="body">{alert_analysis['current']['advice']}</div>
+        </div>""", unsafe_allow_html=True,
     )
+    with st.expander("Forecast alert details", expanded=True):
+        st.dataframe(pd.DataFrame(alert_analysis["forecast_rows"]), use_container_width=True, hide_index=True)
 
-with c3:
-    val = conditions["humidity"]
-    st.markdown(
-        f"""<div class="metric-card">
-            <div class="label">Humidity</div>
-            <div class="value">{f"{val:.0f}%" if val is not None else "N/A"}</div>
-        </div>""",
-        unsafe_allow_html=True,
-    )
+    st.subheader("Forecast trajectory")
+    base_time = predictions["generated_at"].iloc[0]
+    x_values = [base_time] + predictions["forecast_for"].tolist()
+    y_values = [conditions["current_aqi"] if conditions["current_aqi"] is not None else predictions["predicted_aqi"].iloc[0]] + predictions["predicted_aqi"].tolist()
+    upper, lower = [y_values[0]], [y_values[0]]
+    for _, row in predictions.iterrows():
+        margin = 1.28 * row["holdout_rmse"] if pd.notna(row["holdout_rmse"]) else 0.0
+        upper.append(row["predicted_aqi"] + margin)
+        lower.append(max(0.0, row["predicted_aqi"] - margin))
+    forecast_fig = go.Figure()
+    forecast_fig.add_trace(go.Scatter(x=x_values + x_values[::-1], y=upper + lower[::-1], fill="toself", fillcolor="rgba(80,140,255,0.15)", line={"color": "rgba(0,0,0,0)"}, hoverinfo="skip", name="Approx. 80% interval"))
+    forecast_fig.add_trace(go.Scatter(x=x_values, y=y_values, mode="lines+markers", line={"color": "#5b8dff", "width": 3}, name="Predicted AQI"))
+    forecast_fig.update_layout(template="plotly_dark", height=420, xaxis_title="Time", yaxis_title="AQI")
+    st.plotly_chart(forecast_fig, use_container_width=True)
+    with st.expander("Forecast details", expanded=True):
+        st.dataframe(predictions[["forecast_for", "horizon_hours", "predicted_aqi", "model_type", "holdout_rmse"]], use_container_width=True, hide_index=True)
 
-with c4:
-    val = conditions["pm25"]
-    st.markdown(
-        f"""<div class="metric-card">
-            <div class="label">PM2.5</div>
-            <div class="value">{f"{val:.1f} µg/m³" if val is not None else "N/A"}</div>
-        </div>""",
-        unsafe_allow_html=True,
-    )
+with evaluation_tab:
+    st.subheader("Why these champion models were selected")
+    metric = st.selectbox("Evaluation metric", ["rmse", "mae", "r2"], format_func=lambda value: value.upper(), index=0)
+    evaluation = load_evaluation_results().copy()
+    evaluation["model_label"] = evaluation["model"].str.replace("_pruned", "", regex=False)
+    evaluation["horizon_label"] = evaluation["horizon"].astype(str) + "h"
+    evaluation_fig = go.Figure()
+    for model in evaluation["model_label"].unique():
+        subset = evaluation[evaluation["model_label"] == model]
+        evaluation_fig.add_trace(go.Bar(x=subset["horizon_label"], y=subset[metric], name=model))
+    evaluation_fig.update_layout(barmode="group", template="plotly_dark", height=430, yaxis_title=metric.upper(), xaxis_title="Forecast horizon")
+    st.plotly_chart(evaluation_fig, use_container_width=True)
+    st.caption("For RMSE and MAE, lower is better. For R², higher is better. The champion is selected independently for each horizon.")
+    winners = evaluation.loc[evaluation.groupby("horizon")[metric].idxmin() if metric != "r2" else evaluation.groupby("horizon")[metric].idxmax()].copy()
+    winners["Selection"] = winners.apply(lambda row: f"{row['model_label']} selected for {int(row['horizon'])}h", axis=1)
+    st.dataframe(winners[["horizon_label", "Selection", metric]], use_container_width=True, hide_index=True)
+    with st.expander("Full holdout metrics", expanded=True):
+        st.dataframe(evaluation[["model_label", "horizon_label", "rmse", "mae", "r2"]], use_container_width=True, hide_index=True)
 
-if any(v is None for k, v in conditions.items() if k != "_detected_columns"):
-    with st.expander("⚠️ Some current-condition values couldn't be auto-detected"):
-        st.write(
-            "Column auto-detection didn't find a match for one or more fields. "
-            "Detected columns:"
-        )
-        st.json(conditions["_detected_columns"])
-        st.write("If these are wrong or missing, share the actual feature-group column names.")
+with shap_tab:
+    st.subheader("Global SHAP feature importance")
+    shap_horizon = st.selectbox("Forecast horizon", [24, 48, 72], format_func=lambda value: f"{value} hours", index=0)
+    shap_data = load_shap_results(shap_horizon).head(15).sort_values("mean_abs_shap")
+    shap_fig = go.Figure(go.Bar(x=shap_data["mean_abs_shap"], y=shap_data["feature"], orientation="h", marker_color="#55c2a5"))
+    shap_fig.update_layout(template="plotly_dark", height=560, xaxis_title="Mean absolute SHAP value", yaxis_title="Feature")
+    st.plotly_chart(shap_fig, use_container_width=True)
+    st.caption("Higher mean absolute SHAP values indicate greater average influence on the model output. They do not show whether a feature raises or lowers an individual forecast.")
+    with st.expander("Selected SHAP features", expanded=True):
+        st.dataframe(shap_data.sort_values("mean_abs_shap", ascending=False), use_container_width=True, hide_index=True)
 
-st.divider()
+with eda_tab:
+    st.subheader("Exploratory data analysis insights")
+    st.caption("These views summarize the patterns used to guide feature engineering and model selection.")
 
-# ── AQI alert analysis ──────────────────────────────────────────────────
-st.subheader("AQI Alert Analysis")
+    eda_top_left, eda_top_right = st.columns(2)
+    with eda_top_left:
+        st.image(PROJECT_ROOT / "EDA-outputs" / "target_dist.png", caption="AQI target distribution", use_container_width=True)
+        st.markdown("**Continuous forecasting target**")
+        st.write("AQI spans a range of conditions, so the project predicts a continuous value before mapping it to health categories.")
+    with eda_top_right:
+        st.image(PROJECT_ROOT / "EDA-outputs" / "aqi_trend.png", caption="AQI trend over time", use_container_width=True)
+        st.markdown("**Temporal persistence**")
+        st.write("The time-series pattern supports lag and rolling features: recent AQI conditions contain useful information about the next forecast horizon.")
 
-alert_level = alert_analysis["forecast_peak"]["alert_level"]
-alert_colors = {
-    "normal": "#2ecc71",
-    "watch": "#f4d03f",
-    "warning": "#e67e22",
-    "critical": "#e74c3c",
-    "unknown": "#8b93b0",
-}
-alert_color = alert_colors.get(alert_level, "#8b93b0")
-
-st.markdown(
-    f"""<div class="alert-card" style="border-color:{alert_color};">
-        <div class="title" style="color:{alert_color};">{alert_analysis['headline']}</div>
-        <div class="body">{alert_analysis['current']['advice']}</div>
-    </div>""",
-    unsafe_allow_html=True,
-)
-
-alert_c1, alert_c2, alert_c3 = st.columns(3)
-
-with alert_c1:
-    st.metric(
-        "Current AQI status",
-        alert_analysis["current"]["label"] or "N/A",
-        delta=alert_analysis["current"]["alert_level"],
-    )
-with alert_c2:
-    peak = alert_analysis["forecast_peak"]
-    peak_label = peak["label"] or "N/A"
-    peak_hint = f"{peak['horizon_hours']}h" if peak["horizon_hours"] is not None else None
-    st.metric("Worst forecast", peak_label, delta=peak_hint)
-with alert_c3:
-    st.metric("Alert state", alert_analysis["headline"], delta=alert_analysis["forecast_peak"]["alert_level"])
-
-with st.expander("Forecast alert details"):
-    forecast_alerts = pd.DataFrame(alert_analysis["forecast_rows"])
-    if not forecast_alerts.empty:
-        st.dataframe(
-            forecast_alerts[["horizon_hours", "forecast_for", "predicted_aqi", "aqi_label", "alert_level"]],
-            use_container_width=True,
-            hide_index=True,
-        )
-    else:
-        st.write("No forecast rows available for alert analysis.")
-
-# Forecast trajectory chart 
-st.subheader("Forecast Trajectory")
-
-base_time = predictions["generated_at"].iloc[0]
-x_vals = [base_time] + predictions["forecast_for"].tolist()
-y_vals = [conditions["current_aqi"] if conditions["current_aqi"] is not None else predictions["predicted_aqi"].iloc[0]]
-y_vals += predictions["predicted_aqi"].tolist()
-
-upper = [y_vals[0]]
-lower = [y_vals[0]]
-for _, r in predictions.iterrows():
-    rmse = r["holdout_rmse"] if pd.notna(r["holdout_rmse"]) else 0.0
-    margin = 1.28 * rmse  # ~80% interval under a normal approximation
-    upper.append(r["predicted_aqi"] + margin)
-    lower.append(max(0.0, r["predicted_aqi"] - margin))
-
-fig = go.Figure()
-fig.add_trace(go.Scatter(
-    x=x_vals + x_vals[::-1], y=upper + lower[::-1],
-    fill="toself", fillcolor="rgba(80,140,255,0.15)",
-    line={"color": "rgba(0,0,0,0)"}, hoverinfo="skip",
-    name="~80% interval (approx., from holdout RMSE)",
-))
-fig.add_trace(go.Scatter(
-    x=x_vals, y=y_vals, mode="lines+markers",
-    line={"color": "#5b8dff", "width": 3}, marker={"size": 8},
-    name="Predicted AQI",
-))
-fig.update_layout(
-    template="plotly_dark",
-    height=420,
-    margin={"l": 10, "r": 10, "t": 10, "b": 10},
-    xaxis_title="Time",
-    yaxis_title="AQI",
-    legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
-)
-st.plotly_chart(fig, use_container_width=True)
-st.caption(
-    "Band is an approximate 80% interval (predicted ± 1.28 × holdout RMSE per horizon), "
-    "not a calibrated conformal interval. Register the karachi_aqi_cqr_*h models for "
-    "properly calibrated coverage."
-)
-
-# Last 7 days chart
-st.subheader("Last 7 Days")
-
-history = load_history(days=7)
-hist_cols = list(history.columns)
-hist_aqi_col = find_column(hist_cols, ["us_aqi", "aqi"], exclude=["target", "predicted"])
-
-if hist_aqi_col is None:
-    st.info("Couldn't auto-detect a historical AQI column in the feature group to plot here.")
-else:
-    fig2 = go.Figure()
-    y_max = max(300, float(history[hist_aqi_col].max()) + 20)
-    for lo, hi, label, color in AQI_CATEGORIES:
-        fig2.add_hrect(y0=lo, y1=min(hi, y_max), fillcolor=color, opacity=0.10, line_width=0)
-    fig2.add_trace(go.Scatter(
-        x=history["timestamp"], y=history[hist_aqi_col],
-        mode="lines", line={"color": "#f0f2fa", "width": 2}, name="Observed AQI",
-    ))
-    fig2.update_layout(
-        template="plotly_dark",
-        height=380,
-        margin={"l": 10, "r": 10, "t": 10, "b": 10},
-        xaxis_title="Time",
-        yaxis_title="AQI",
-        yaxis_range=[0, y_max],
-        showlegend=False,
-    )
-    st.plotly_chart(fig2, use_container_width=True)
-
-# Forecast table + per-horizon model info 
-with st.expander("Forecast details"):
-    st.dataframe(
-        predictions[["forecast_for", "horizon_hours", "predicted_aqi", "model_type", "holdout_rmse"]],
-        width="stretch",
-        hide_index=True,
-    )
+    eda_bottom_left, eda_bottom_right = st.columns(2)
+    with eda_bottom_left:
+        st.image(PROJECT_ROOT / "EDA-outputs" / "feature_corr.png", caption="Feature correlation", use_container_width=True)
+        st.markdown("**Related environmental signals**")
+        st.write("Pollutant, weather, and engineered AQI variables are related, which is why the model uses regularization and horizon-specific feature pruning.")
+    with eda_bottom_right:
+        st.image(PROJECT_ROOT / "EDA-outputs" / "feature_dist.png", caption="Feature distributions", use_container_width=True)
+        st.markdown("**Different feature scales**")
+        st.write("Features have different ranges and distributions. Scaling, missing-value handling, and robust feature preparation are important parts of the training pipeline.")

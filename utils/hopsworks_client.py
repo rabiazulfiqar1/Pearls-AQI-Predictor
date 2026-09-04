@@ -15,6 +15,7 @@ Required env vars:
 """
 
 import os
+from functools import lru_cache
 
 import hopsworks
 from dotenv import load_dotenv
@@ -22,6 +23,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+@lru_cache(maxsize=1)
 def _login():
     """
     Log into Hopsworks and return the project handle.
@@ -48,12 +50,14 @@ def _login():
     return hopsworks.login(**login_kwargs)
 
 
+@lru_cache(maxsize=1)
 def get_feature_store():
     """Log into Hopsworks and return the project's feature store handle."""
     project = _login()
     return project.get_feature_store()
 
 
+@lru_cache(maxsize=1)
 def get_model_registry():
     """Log into Hopsworks and return the project's model registry handle.
 
